@@ -1,0 +1,213 @@
+
+`timescale 1 ns/ 1 ps //количество тактов на 1 наносекунду
+
+module mux(
+//объявление проводов, сетевые переменные
+//провода соед модулю, регистры хранят и изменяют значения
+	input wire [3:0]addr, //вход адреса
+	input wire [15:0]data, //входы данных
+	output reg selector //выход - значение по адресу, указанному на соответственном входе. РЕГИСТРОВЫЙ, может в изменяемость
+);
+
+//always - это блок, которые всегда выполняется.
+//always @(*) - проверяет изменения всех входных сигналов всегда
+always @(*) begin //В зависимости от указанного адреса выбираем вход данных и на выход пишем то, что на этом входе
+	case(addr) //выборка адреса
+	//инверсия, так как на схему у нас она присутсвует
+		4'd00: selector = ~data[0]; //запись в данные нужные биты по addr
+		4'd01: selector = ~data[1];
+		4'd02: selector = ~data[2];
+		4'd03: selector = ~data[3];
+		4'd04: selector = ~data[4];
+		4'd05: selector = ~data[5];
+		4'd06: selector = ~data[6];
+		4'd07: selector = ~data[7];
+		4'd08: selector = ~data[8];
+		4'd09: selector = ~data[9];
+		4'd10: selector = ~data[10];
+		4'd11: selector = ~data[11];
+		4'd12: selector = ~data[12];
+		4'd13: selector = ~data[13];
+		4'd14: selector = ~data[14];
+		4'd15: selector = ~data[15];
+	endcase
+end
+endmodule
+
+//mux_vlg_tst - блок счетчика с ошибкой
+module mux_vlg_tst();
+reg clk; //значения счетчика
+reg sbros; 
+wire out;
+wire error;
+reg[0:15]i;
+initial clk=0;
+initial sbros=1;
+  main m(.clock(clk),.sbros(sbros),.out(out), .error(error));
+initial //Сбрасываем схему, чтобы все значения на счётчиков стали равны 0.
+  begin
+    sbros = 0; 
+    #2 sbros = 1;// #2 - задержка в тактах
+  end
+initial
+  begin
+    clk = 0; 
+	 for (i = 0; i < 100; i=i+1)
+	 begin
+			#5 clk = ~clk;//Раз в 5 мс clk инвертируется.
+	 end	  
+  end
+  
+ initial 
+  begin
+    #200 $stop; 
+  end
+endmodule
+
+module counter(
+//input - означает, что они задаются и могут быть изменены
+	input clk, //тактирующий вход
+	input clr, //вход сброса
+	input enp, //разрешение инкремента, влияет на RCO
+	input ent, //разрешение инкремента, не влияет на RCO
+	input load,//загрузка данных по спадающему фронту
+	input [0:3] in,//вход данных
+	output reg [0:3] out, //выход данных
+	output reg rco//Если значение выхода данных - 1111, то он становится равным 1. Иначе 0.
+
+);
+always @ (posedge clk or negedge clr) begin //при восходящем фронте clk или нисходящем фронте clr срабатывает
+	//если нисходящий фронт был на clr, он равен нулю. А значит, что при любой ситуации, когда clr=0, на выходах устанавливается 0000.
+	if (~clr)
+		out <= 4'b0;
+	else begin //Если clr!=0, значит нисходящего фронта clr быть не могло, а значит тикнул clk.
+		rco <= (&out)&enp;//RCO=1 только тогда, когда все выходы данных равны 1 и когда enp равен 1.
+		if (ent&enp)//Если инкремент не запрещён, то есть ent=enp=1,инкрементируес выход.
+			out <= out + 1;
+		if (~load)//Если load=0, переписываем значения с выходов
+			out <= in;
+	end
+
+end
+
+endmodule
+
+module main (input clock,sbros,output out,output reg error);
+//сетевые переменных, которые поступают из вне (связь переменных
+wire[1:20]datacables;
+wire out1;
+wire out2;
+wire[1:20]datacab2;
+wire[1:4]rcout;
+reg[1:20] datain;
+//assign - предварительная связка. Для создания уже внутр переменных на основании внутренних переменных
+assign datacab2[1:3] = datacables[1:3];
+assign datacab2[5:20] = datacables[5:20];
+assign datacab2[4] = datacables[4];
+assign out = out1;
+wire cnt;
+//создаем счетчики есть регистровый способ, а есть 
+//второй способ - именовыние порта - порт load загружаем 1'b1)
+//1'b1 - 1 бит двоичный значения 1
+counter c1(.ent(1'b1),.enp(1'b1),.load(1'b1),.clr(sbros),.out(datacables[1:4]),.clk(cnt),.rco(rcout[1]));
+counter c2(.ent(1'b1),.enp(1'b1),.load(1'b1),.clr(sbros),.out(datacables[5:8]),.clk(rcout[1]),.rco(rcout[2]));
+counter c3(.ent(1'b1),.enp(1'b1),.load(1'b1),.clr(sbros),.out(datacables[9:12]),.clk(rcout[2]),.rco(rcout[3]));
+counter c4(.ent(1'b1),.enp(1'b1),.load(1'b1),.clr(sbros),.out(datacables[13:16]),.clk(rcout[3]),.rco(rcout[4]));
+counter c5(.ent(1'b1),.enp(1'b1),.load(1'b1),.clr(sbros),.out(datacables[17:20]),.clk(rcout[4]));
+//создаем мультиплексоры. Подключение Шины адреса через  внешние datacables
+mux mux1 (.addr(datacables[1:4]),.data(datacables[5:20]),.selector(out1));
+mux mux2 (.addr(datacab2[1:4]),.data(datacab2[5:20]),.selector(out2));
+initial error <=0;
+always @(posedge sbros)//При сбросе схема начинает работать сначала
+begin
+  datain = 20'b0;//обнуление данных 20 штук бинарные по 0
+  error <= 1; //
+end
+always @(posedge clock)//При каждом тактирующем импульсе проверяется, равны ли значения с двух микросхем. Если нет, error=0.
+begin
+  if (out1 != out2)
+	error = 0;
+end
+//создаем кусок модуля. Задает элемент что слева на схеме у Тактового сигнала
+assign cnt = clock&error;//Модуль не будет тактироваться после ошибки.
+endmodule
+
+
+module testbench; 
+reg clk; 
+reg sbros;
+reg[0:20]i; 
+wire out;
+wire error;
+initial clk=1;
+initial sbros=1;
+   main m(.clock(clk),.sbros(sbros),.out(out), .error(error));
+initial
+  begin
+    sbros = 0; 
+    #2 sbros = 1;//задержка 
+    clk = 0; 
+    for(i = 0; i < 1000; i=i+1)
+	 begin
+		#1 clk = ~clk;
+	 end 
+  end
+endmodule
+
+module statemachine; //машина состояний, управляет этим 
+reg clk;
+reg ent;
+reg enp;
+reg reset;
+reg load;
+reg[0:20]i;
+reg [0:3]in;
+wire[0:3]out; 
+wire rco;
+  counter cntr(.clr(reset),.clk(clk),.ent(ent),.enp(enp),.out(out),.rco(rco),.in(in),.load(load));
+initial //моделирование работы схемы
+  begin//устанавливаем значения
+      in <= 4'b1100;    //начальное состояние выхода
+     reset = 0;
+   #1 reset = 1;//установка задержек
+   #1 reset = 0;
+   #1 reset = 1;
+   load <= 0; //Неблокирующее присваивание
+   #1 clk = ~clk;
+   #1 clk = ~clk;
+   #1 load<=1; //Неблокирующее присваивание
+	clk = 0;
+	ent = 0;
+	enp = 0;
+    for(i = 0; i < 1000; i=i+1)
+    begin
+	 
+	 if (i<500)
+	 begin
+				#1
+				clk = ~clk;
+				#1
+				clk = ~clk;
+				#1
+				clk = ~clk;
+				#1
+				clk = ~clk;
+				enp = ~enp;
+	end
+		else
+		begin
+				#1
+				clk = ~clk;
+				#1
+				clk = ~clk;
+				ent =  ~ent;
+				#1
+				clk = ~clk;
+				#1
+				clk = ~clk;
+				ent =  ~ent;
+				enp = ~enp;
+		end
+    end
+end
+endmodule
